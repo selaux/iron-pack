@@ -6,6 +6,7 @@ use iron::headers::*;
 use iron::{AfterMiddleware};
 
 mod gzip_writer;
+mod deflate_writer;
 
 const MIN_COMPRESSABLE_SIZE: u64 = 860;
 
@@ -26,7 +27,7 @@ fn which_compression(req: &Request, res: &Response) -> Option<Encoding> {
 
     {
         if let Some(&AcceptEncoding(ref quality_items)) = req.headers.get::<AcceptEncoding>() {
-            let allowed_qi = quality_items.iter().find(|qi| qi.item == Encoding::Gzip);
+            let allowed_qi = quality_items.iter().find(|qi| qi.item == Encoding::Gzip || qi.item == Encoding::Deflate);
 
             if let Some(&QualityItem { item: ref encoding, quality: _ }) = allowed_qi {
                 return Some(encoding.clone());
@@ -46,6 +47,10 @@ impl AfterMiddleware for CompressionMiddleware {
         match compression {
             Some(Encoding::Gzip) => {
                 res.set_mut(gzip_writer::GzipWriter);
+                Ok(res)
+            },
+            Some(Encoding::Deflate) => {
+                res.set_mut(deflate_writer::DeflateWriter);
                 Ok(res)
             },
             _ => Ok(res)
@@ -199,6 +204,44 @@ mod gzip_tests {
 
         let compressed_bytes = response::extract_body_to_bytes(res);
         let mut decoder = gzip::Decoder::new(&compressed_bytes[..]).unwrap();
+        let mut decoded_data = Vec::new();
+        decoder.read_to_end(&mut decoded_data).unwrap();
+        assert_eq!(decoded_data, value.into_bytes());
+    }
+}
+
+#[cfg(test)]
+mod deflate_tests {
+    extern crate iron_test;
+
+    use std::io::Read;
+    use iron::headers::*;
+    use iron::Headers;
+    use self::iron_test::{request, response};
+    use libflate::deflate;
+
+    use super::test_common::*;
+
+    #[test]
+    fn it_should_compress_long_response() {
+        let mut headers = Headers::new();
+        let value = "a".repeat(1000);
+        let chain = build_compressed_echo_chain(false);
+
+        headers.set(
+            AcceptEncoding(vec![qitem(Encoding::Deflate)])
+        );
+        let res = request::post("http://localhost:3000/",
+                                headers,
+                                &value,
+                                &chain).unwrap();
+
+        {
+            assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Deflate])));
+        }
+
+        let compressed_bytes = response::extract_body_to_bytes(res);
+        let mut decoder = deflate::Decoder::new(&compressed_bytes[..]);
         let mut decoded_data = Vec::new();
         decoder.read_to_end(&mut decoded_data).unwrap();
         assert_eq!(decoded_data, value.into_bytes());
