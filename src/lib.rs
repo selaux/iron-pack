@@ -54,20 +54,16 @@ impl AfterMiddleware for CompressionMiddleware {
 }
 
 #[cfg(test)]
-mod gzip_tests {
-    extern crate iron_test;
-
+mod test_common {
     use std::io::Read;
     use iron::prelude::*;
     use iron::headers::*;
-    use iron::{Chain, Headers, status};
+    use iron::{Chain, status};
     use iron::modifiers::Header;
-    use self::iron_test::{request, response};
-    use libflate::gzip;
 
     use super::CompressionMiddleware;
 
-    fn build_compressed_echo_chain(with_encoding: bool) -> Chain {
+    pub fn build_compressed_echo_chain(with_encoding: bool) -> Chain {
         let mut chain = Chain::new(move |req: &mut Request| {
             let mut body: Vec<u8> = vec!();
             req.body.read_to_end(&mut body).unwrap();
@@ -81,6 +77,17 @@ mod gzip_tests {
         chain.link_after(CompressionMiddleware);
         return chain;
     }
+}
+
+#[cfg(test)]
+mod uncompressable_tests {
+    extern crate iron_test;
+
+    use iron::headers::*;
+    use iron::Headers;
+    use self::iron_test::{request, response};
+
+    use super::test_common::*;
 
     #[test]
     fn it_should_not_compress_when_client_does_not_accept() {
@@ -158,6 +165,19 @@ mod gzip_tests {
         }
         assert_eq!(response::extract_body_to_bytes(res), value.into_bytes());
     }
+}
+
+#[cfg(test)]
+mod gzip_tests {
+    extern crate iron_test;
+
+    use std::io::Read;
+    use iron::headers::*;
+    use iron::Headers;
+    use self::iron_test::{request, response};
+    use libflate::gzip;
+
+    use super::test_common::*;
 
     #[test]
     fn it_should_compress_long_response() {
