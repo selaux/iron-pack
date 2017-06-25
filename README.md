@@ -4,7 +4,7 @@
 [![Documentation](https://docs.rs/iron-pack/badge.svg)](https://docs.rs/crate/iron-pack)
 [![Build Status](https://travis-ci.org/selaux/iron-pack.svg?branch=master)](https://travis-ci.org/selaux/iron-pack)
 
-Zero-configuration compression middleware for iron.
+Zero-configuration compression middleware for the [iron web framework](https://crates.io/crates/iron).
 
 Based on [libflate](https://crates.io/crates/libflate).
 
