@@ -19,9 +19,10 @@ fn which_compression(req: &Request, res: &Response) -> Option<Encoding> {
     }
 
     {
-        let length = res.headers.get::<ContentLength>().unwrap();
-        if (length as &u64) < &MIN_COMPRESSABLE_SIZE {
-            return None;
+        if let Some(length) = res.headers.get::<ContentLength>() {
+            if (length as &u64) < &MIN_COMPRESSABLE_SIZE {
+                return None;
+            }
         }
     }
 
