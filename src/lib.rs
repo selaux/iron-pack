@@ -53,7 +53,7 @@ fn which_compression(req: &Request, res: &Response) -> Option<Encoding> {
 /// chosen by evaluating the `AcceptEncoding` header sent by the client.
 ///
 /// # Example
-/// ```
+/// ```rust,no_run
 /// extern crate iron;
 /// extern crate iron_pack;
 ///
