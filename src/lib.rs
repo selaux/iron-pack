@@ -1,3 +1,6 @@
+//! Compression middleware for Iron. This crate lets you automatically compress iron responses
+//! by providing an AfterMiddleware for your iron server.
+
 extern crate iron;
 extern crate libflate;
 
@@ -44,9 +47,35 @@ fn which_compression(req: &Request, res: &Response) -> Option<Encoding> {
     return None;
 }
 
+/// **Compression Middleware**
+///
+/// Currently either compresses using gzip or deflate algorithms. The algorithm is
+/// chosen by evaluating the `AcceptEncoding` header sent by the client.
+///
+/// # Example
+/// ```
+/// extern crate iron;
+/// extern crate iron_pack;
+///
+/// use iron::prelude::*;
+/// use iron_pack::CompressionMiddleware;
+///
+/// fn a_lot_of_batman(_: &mut Request) -> IronResult<Response> {
+///     let nana = "Na".repeat(5000);
+///     Ok(Response::with((iron::status::Ok, format!("{}, Batman!", nana))))
+/// }
+///
+/// fn main() {
+///     let mut chain = Chain::new(a_lot_of_batman);
+///     chain.link_after(CompressionMiddleware);
+///     Iron::new(chain).http("localhost:3000").unwrap();
+/// }
+/// ```
 pub struct CompressionMiddleware;
 
 impl AfterMiddleware for CompressionMiddleware {
+
+    /// Implementation of the compression middleware
     fn after(&self, req: &mut Request, mut res: Response) -> IronResult<Response> {
         let compression = which_compression(&req, &res);
 
