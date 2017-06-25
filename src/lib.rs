@@ -350,4 +350,32 @@ mod priority_tests {
         decoder.read_to_end(&mut decoded_data).unwrap();
         assert_eq!(decoded_data, value.into_bytes());
     }
+
+    #[test]
+    fn it_should_use_the_first_algorithm_if_there_are_no_priorities() {
+        let mut headers = Headers::new();
+        let value = "a".repeat(1000);
+        let chain = build_compressed_echo_chain(false);
+
+        headers.set(
+            AcceptEncoding(vec![
+                qitem(Encoding::Deflate),
+                qitem(Encoding::Gzip)
+            ])
+        );
+        let res = request::post("http://localhost:3000/",
+                                headers,
+                                &value,
+                                &chain).unwrap();
+
+        {
+            assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Deflate])));
+        }
+
+        let compressed_bytes = response::extract_body_to_bytes(res);
+        let mut decoder = deflate::Decoder::new(&compressed_bytes[..]);
+        let mut decoded_data = Vec::new();
+        decoder.read_to_end(&mut decoded_data).unwrap();
+        assert_eq!(decoded_data, value.into_bytes());
+    }
 }
