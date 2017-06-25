@@ -1,0 +1,16 @@
+[package]
+name = "iron-pack"
+version = "0.1.0"
+description = "Zero-configuration compression middleware for iron"
+authors = ["Stefan Lau <github@stefanlau.com>"]
+license = "MIT"
+
+[lib]
+name = "iron_pack"
+
+[dependencies]
+iron = "0.5"
+libflate = "0.1"
+
+[dev-dependencies]
+iron-test = "0.5"
