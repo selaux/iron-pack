@@ -14,7 +14,7 @@ mod gzip_writer;
 mod deflate_writer;
 mod brotli_writer;
 
-const MIN_COMPRESSABLE_SIZE: u64 = 860;
+const DEFAULT_MIN_BYTES_FOR_COMPRESSION: u64 = 860;
 
 fn which_compression(req: &Request, res: &Response) -> Option<Encoding> {
     {
@@ -26,7 +26,7 @@ fn which_compression(req: &Request, res: &Response) -> Option<Encoding> {
 
     {
         if let Some(length) = res.headers.get::<ContentLength>() {
-            if (length as &u64) < &MIN_COMPRESSABLE_SIZE {
+            if (length as &u64) < &DEFAULT_MIN_BYTES_FOR_COMPRESSION {
                 return None;
             }
         }
