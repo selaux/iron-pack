@@ -6,7 +6,7 @@
 
 Zero-configuration compression middleware for the [iron web framework](https://crates.io/crates/iron).
 
-Based on [libflate](https://crates.io/crates/libflate).
+Based on [libflate](https://crates.io/crates/libflate) and [brotli](https://crates.io/crates/brotli).
 
 ## Example
 

@@ -3,6 +3,7 @@
 
 extern crate iron;
 extern crate libflate;
+extern crate brotli;
 
 use iron::prelude::*;
 use iron::headers::*;
@@ -10,6 +11,7 @@ use iron::{AfterMiddleware};
 
 mod gzip_writer;
 mod deflate_writer;
+mod brotli_writer;
 
 const MIN_COMPRESSABLE_SIZE: u64 = 860;
 
@@ -30,13 +32,14 @@ fn which_compression(req: &Request, res: &Response) -> Option<Encoding> {
     }
 
     {
+        let brotli_encoding = Encoding::EncodingExt(String::from("br"));
         if let Some(&AcceptEncoding(ref quality_items)) = req.headers.get::<AcceptEncoding>() {
             let mut sorted_qis = quality_items.clone();
 
             sorted_qis.sort_by(|qi1, qi2| qi2.quality.cmp(&(qi1.quality)));
 
 
-             let allowed_qi = sorted_qis.iter().find(|qi| qi.item == Encoding::Gzip || qi.item == Encoding::Deflate);
+            let allowed_qi = sorted_qis.iter().find(|qi| (qi.item == Encoding::Gzip || qi.item == Encoding::Deflate || qi.item == brotli_encoding));
 
             if let Some(&QualityItem { item: ref encoding, quality: _ }) = allowed_qi {
                 return Some(encoding.clone());
@@ -86,6 +89,12 @@ impl AfterMiddleware for CompressionMiddleware {
             },
             Some(Encoding::Deflate) => {
                 res.set_mut(deflate_writer::DeflateWriter);
+                Ok(res)
+            },
+            Some(Encoding::EncodingExt(s)) => {
+                if s == "br" {
+                    res.set_mut(brotli_writer::BrotliWriter);
+                }
                 Ok(res)
             },
             _ => Ok(res)
@@ -277,6 +286,44 @@ mod deflate_tests {
 
         let compressed_bytes = response::extract_body_to_bytes(res);
         let mut decoder = deflate::Decoder::new(&compressed_bytes[..]);
+        let mut decoded_data = Vec::new();
+        decoder.read_to_end(&mut decoded_data).unwrap();
+        assert_eq!(decoded_data, value.into_bytes());
+    }
+}
+
+#[cfg(test)]
+mod brotli_tests {
+    extern crate iron_test;
+
+    use std::io::Read;
+    use iron::headers::*;
+    use iron::Headers;
+    use self::iron_test::{request, response};
+    use brotli;
+
+    use super::test_common::*;
+
+    #[test]
+    fn it_should_compress_long_response() {
+        let mut headers = Headers::new();
+        let value = "a".repeat(1000);
+        let chain = build_compressed_echo_chain(false);
+
+        headers.set(
+            AcceptEncoding(vec![qitem(Encoding::EncodingExt(String::from("br")))])
+        );
+        let res = request::post("http://localhost:3000/",
+                                headers,
+                                &value,
+                                &chain).unwrap();
+
+        {
+            assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::EncodingExt(String::from("br"))])));
+        }
+
+        let compressed_bytes = response::extract_body_to_bytes(res);
+        let mut decoder = brotli::Decompressor::new(&compressed_bytes[..], 4096);
         let mut decoded_data = Vec::new();
         decoder.read_to_end(&mut decoded_data).unwrap();
         assert_eq!(decoded_data, value.into_bytes());

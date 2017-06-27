@@ -12,5 +12,5 @@ fn a_lot_of_batman(_: &mut Request) -> IronResult<Response> {
 fn main() {
     let mut chain = Chain::new(a_lot_of_batman);
     chain.link_after(CompressionMiddleware);
-    Iron::new(chain).http("localhost:3000").unwrap();
+    Iron::new(chain).http("0.0.0.0:3000").unwrap();
 }
