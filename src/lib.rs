@@ -5,6 +5,7 @@ extern crate iron;
 extern crate libflate;
 extern crate brotli;
 
+use std::cmp::Ordering::{Equal, Greater, Less};
 use iron::prelude::*;
 use iron::headers::*;
 use iron::{AfterMiddleware};
@@ -34,15 +35,46 @@ fn which_compression(req: &Request, res: &Response) -> Option<Encoding> {
     {
         let brotli_encoding = Encoding::EncodingExt(String::from("br"));
         if let Some(&AcceptEncoding(ref quality_items)) = req.headers.get::<AcceptEncoding>() {
-            let mut sorted_qis = quality_items.clone();
+            let max_quality = quality_items.iter().map(|qi| qi.quality).max();
 
-            sorted_qis.sort_by(|qi1, qi2| qi2.quality.cmp(&(qi1.quality)));
+            if let Some(max_quality) = max_quality {
+                let internal_priority = vec![
+                    brotli_encoding,
+                    Encoding::Gzip,
+                    Encoding::EncodingExt(String::from("*")),
+                    Encoding::Deflate
+                ];
+                let allowed_qi = quality_items
+                    .iter()
+                    .filter(|qi| qi.quality == max_quality)
+                    .filter(|qi| internal_priority.iter().position(|q| q == &qi.item) != None)
+                    .min_by(|qi1, qi2| {
+                        match (internal_priority.iter().position(|qi| qi == &qi1.item), internal_priority.iter().position(|qi| qi == &qi2.item)) {
+                            (Some(a), Some(b)) => {
+                                if a > b {
+                                    return Greater;
+                                };
+                                if a < b {
+                                    return Less;
+                                }
+                                Equal
+                            },
+                            _ => Equal
+                        }
+                    })
+                    .map(|encoding| match &encoding.item {
+                        &Encoding::EncodingExt(ref s) => {
+                            if s == "*" {
+                                return Encoding::Gzip;
+                            }
+                            encoding.item.clone()
+                        },
+                        e => e.clone()
+                    });
 
-
-            let allowed_qi = sorted_qis.iter().find(|qi| (qi.item == Encoding::Gzip || qi.item == Encoding::Deflate || qi.item == brotli_encoding));
-
-            if let Some(&QualityItem { item: ref encoding, quality: _ }) = allowed_qi {
-                return Some(encoding.clone());
+                if let Some(encoding) = allowed_qi {
+                    return Some(encoding);
+                }
             }
         }
     }
@@ -334,11 +366,9 @@ mod brotli_tests {
 mod priority_tests {
     extern crate iron_test;
 
-    use std::io::Read;
     use iron::headers::*;
     use iron::Headers;
-    use self::iron_test::{request, response};
-    use libflate::deflate;
+    use self::iron_test::request;
 
     use super::test_common::*;
 
@@ -359,15 +389,7 @@ mod priority_tests {
                                 &value,
                                 &chain).unwrap();
 
-        {
-            assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Deflate])));
-        }
-
-        let compressed_bytes = response::extract_body_to_bytes(res);
-        let mut decoder = deflate::Decoder::new(&compressed_bytes[..]);
-        let mut decoded_data = Vec::new();
-        decoder.read_to_end(&mut decoded_data).unwrap();
-        assert_eq!(decoded_data, value.into_bytes());
+        assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Deflate])));
     }
 
     #[test]
@@ -387,27 +409,21 @@ mod priority_tests {
                                 &value,
                                 &chain).unwrap();
 
-        {
-            assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Deflate])));
-        }
-
-        let compressed_bytes = response::extract_body_to_bytes(res);
-        let mut decoder = deflate::Decoder::new(&compressed_bytes[..]);
-        let mut decoded_data = Vec::new();
-        decoder.read_to_end(&mut decoded_data).unwrap();
-        assert_eq!(decoded_data, value.into_bytes());
+        assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Deflate])));
     }
 
     #[test]
-    fn it_should_use_the_first_algorithm_if_there_are_no_priorities() {
+    fn it_should_use_the_brotli_algorithm_preferably_when_supported() {
         let mut headers = Headers::new();
         let value = "a".repeat(1000);
         let chain = build_compressed_echo_chain(false);
 
         headers.set(
             AcceptEncoding(vec![
+                qitem(Encoding::EncodingExt(String::from("*"))),
+                qitem(Encoding::Gzip),
+                qitem(Encoding::EncodingExt(String::from("br"))),
                 qitem(Encoding::Deflate),
-                qitem(Encoding::Gzip)
             ])
         );
         let res = request::post("http://localhost:3000/",
@@ -415,14 +431,46 @@ mod priority_tests {
                                 &value,
                                 &chain).unwrap();
 
-        {
-            assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Deflate])));
-        }
+        assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::EncodingExt(String::from("br"))])));
+    }
 
-        let compressed_bytes = response::extract_body_to_bytes(res);
-        let mut decoder = deflate::Decoder::new(&compressed_bytes[..]);
-        let mut decoded_data = Vec::new();
-        decoder.read_to_end(&mut decoded_data).unwrap();
-        assert_eq!(decoded_data, value.into_bytes());
+    #[test]
+    fn it_should_use_the_gzip_algorithm_for_the_any_encoding() {
+        let mut headers = Headers::new();
+        let value = "a".repeat(1000);
+        let chain = build_compressed_echo_chain(false);
+
+        headers.set(
+            AcceptEncoding(vec![
+                qitem(Encoding::EncodingExt(String::from("*"))),
+                qitem(Encoding::Deflate),
+            ])
+        );
+        let res = request::post("http://localhost:3000/",
+                                headers,
+                                &value,
+                                &chain).unwrap();
+
+        assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Gzip])));
+    }
+
+    #[test]
+    fn it_should_use_the_gzip_algorithm_as_second_preference() {
+        let mut headers = Headers::new();
+        let value = "a".repeat(1000);
+        let chain = build_compressed_echo_chain(false);
+
+        headers.set(
+            AcceptEncoding(vec![
+                qitem(Encoding::Deflate),
+                qitem(Encoding::Gzip),
+            ])
+        );
+        let res = request::post("http://localhost:3000/",
+                                headers,
+                                &value,
+                                &chain).unwrap();
+
+        assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Gzip])));
     }
 }
