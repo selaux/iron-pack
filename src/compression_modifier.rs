@@ -3,8 +3,12 @@ use iron::headers::*;
 use iron::modifier::Modifier;
 use iron::response::WriteBody;
 
+/// The trait that needs to be implemented to compress the response body when the client
+/// sends a specific header
 pub trait CompressionModifier {
+    /// Returns the encoding header the compression modifier should respond to
     fn get_header(&self) -> Encoding;
+    /// Returns the compressed request body
     fn compress_body(&self, res: &mut Box<WriteBody>) -> Result<Vec<u8>, String>;
 }
 

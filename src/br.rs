@@ -10,9 +10,10 @@ const BUFFER_SIZE: usize = 4096;
 const QUALITY: u32 = 8;
 const LG_WINDOW_SIZE: u32 = 20;
 
-pub struct Brotli;
+/// Compresses the body using the brotli algorithm and sets header accordingly
+pub struct BrotliModifier;
 
-impl CompressionModifier for Brotli {
+impl CompressionModifier for BrotliModifier {
     fn get_header(&self) -> Encoding { Encoding::EncodingExt(String::from("br")) }
 
     fn compress_body(&self, body: &mut Box<WriteBody>) -> Result<Vec<u8>, String> {

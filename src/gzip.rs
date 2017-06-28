@@ -6,6 +6,7 @@ use compression_modifier::CompressionModifier;
 
 fn stringify_err(err: io::Error) -> String { format!("Error compressing body: {}", err) }
 
+/// Compresses the body using the gzip algorithm and sets header accordingly
 pub struct GZipModifier;
 
 impl CompressionModifier for GZipModifier {

@@ -14,10 +14,11 @@ mod deflate;
 mod br;
 mod compression_modifier;
 
+pub use iron::headers::Encoding;
 pub use compression_modifier::CompressionModifier;
 pub use gzip::GZipModifier;
-pub use br::Brotli;
-pub use deflate::Deflate;
+pub use br::BrotliModifier;
+pub use deflate::DeflateModifier;
 
 const DEFAULT_MIN_BYTES_FOR_COMPRESSION: u64 = 860;
 
@@ -50,7 +51,7 @@ fn which_compression<'a, 'b>(req: &'b Request, res: &'b Response, priority: Vec<
 
 /// **Compression Middleware**
 ///
-/// Currently either compresses using gzip or deflate algorithms. The algorithm is
+/// Currently either compresses using brotli, gzip or deflate algorithms. The algorithm is
 /// chosen by evaluating the `AcceptEncoding` header sent by the client.
 ///
 /// # Example
@@ -78,9 +79,9 @@ impl AfterMiddleware for CompressionMiddleware {
 
     /// Implementation of the compression middleware
     fn after(&self, req: &mut Request, mut res: Response) -> IronResult<Response> {
-        let brotli = br::Brotli {};
+        let brotli = br::BrotliModifier {};
         let gzip = gzip::GZipModifier {};
-        let deflate = deflate::Deflate {};
+        let deflate = deflate::DeflateModifier {};
         let default_priorities: Vec<&CompressionModifier> = vec![
             &brotli,
             &gzip,

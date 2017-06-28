@@ -6,9 +6,10 @@ use compression_modifier::CompressionModifier;
 
 fn stringify_err(err: io::Error) -> String { format!("Error compressing body: {}", err) }
 
-pub struct Deflate;
+/// Compresses the body using the deflate algorithm and sets header accordingly
+pub struct DeflateModifier;
 
-impl CompressionModifier for Deflate {
+impl CompressionModifier for DeflateModifier {
     fn get_header(&self) -> Encoding { Encoding::Deflate }
 
     fn compress_body(&self, body: &mut Box<WriteBody>) -> Result<Vec<u8>, String> {
