@@ -84,13 +84,10 @@ impl AfterMiddleware for CompressionMiddleware {
             &deflate
         ];
 
-        match which_compression(&req, &res, default_priorities) {
-            Some(s) => {
-                res.set_mut(s);
-                Ok(res)
-            }
-            _ => Ok(res)
+        if let Some(compression_modifier) = which_compression(&req, &res, default_priorities) {
+            res.set_mut(compression_modifier);
         }
+        Ok(res)
     }
 }
 
