@@ -19,23 +19,12 @@ use writer::ContentEncoding;
 const DEFAULT_MIN_BYTES_FOR_COMPRESSION: u64 = 860;
 
 fn which_compression<'a, 'b>(req: &'b Request, res: &'b Response, priority: Vec<&'a ContentEncoding>) -> Option<&'a ContentEncoding> {
-    {
-        let encoding = res.headers.get::<iron::headers::ContentEncoding>();
-        if encoding != None {
-            return None;
-        }
-    }
-
-    {
-        if let Some(length) = res.headers.get::<ContentLength>() {
-            if (length as &u64) < &DEFAULT_MIN_BYTES_FOR_COMPRESSION {
+    return match (res.headers.get::<iron::headers::ContentEncoding>(), res.headers.get::<ContentLength>(), req.headers.get::<AcceptEncoding>()) {
+        (None, Some(content_length), Some(&AcceptEncoding(ref quality_items))) => {
+            if (content_length as &u64) < &DEFAULT_MIN_BYTES_FOR_COMPRESSION {
                 return None;
             }
-        }
-    }
 
-    {
-        if let Some(&AcceptEncoding(ref quality_items)) = req.headers.get::<AcceptEncoding>() {
             let max_quality = quality_items.iter().map(|qi| qi.quality).max();
             let any_exists = quality_items.iter().find(|qi| qi.item == Encoding::EncodingExt(String::from("*"))).is_some();
 
@@ -50,10 +39,10 @@ fn which_compression<'a, 'b>(req: &'b Request, res: &'b Response, priority: Vec<
                     .map(|ce: & &'a ContentEncoding| *ce)
                     .min_by_key(|ce1: & &'a ContentEncoding| priority.iter().position(|ce2: & &'a ContentEncoding| ce1.get_header() == ce2.get_header()));
             }
+            None
         }
-    }
-
-    return None;
+        _ => None
+    };
 }
 
 /// **Compression Middleware**
@@ -94,9 +83,8 @@ impl AfterMiddleware for CompressionMiddleware {
             &gzip,
             &deflate
         ];
-        let compression = which_compression(&req, &res, default_priorities);
 
-        match compression {
+        match which_compression(&req, &res, default_priorities) {
             Some(s) => {
                 res.set_mut(s);
                 Ok(res)
