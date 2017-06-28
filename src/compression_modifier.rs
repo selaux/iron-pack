@@ -5,6 +5,27 @@ use iron::response::WriteBody;
 
 /// The trait that needs to be implemented to compress the response body when the client
 /// sends a specific header
+///
+/// # Example
+///
+/// An identiy modifier
+///
+/// ```rust,no_run
+/// use iron_pack::{ Encoding, CompressionModifier, WriteBody };
+///
+/// struct IdentityModifier {}
+///
+/// impl CompressionModifier for IdentityModifier {
+///     fn get_header(&self) -> Encoding { Encoding::EncodingExt(String::from("br")) }
+///
+///     fn compress_body(&self, body: &mut Box<WriteBody>) -> Result<Vec<u8>, String> {
+///         let mut data: Vec<u8> = Vec::new();
+///         body.write_body(&mut data).map_err(|e| format!("{}", e))?;
+///         return Ok(data)
+///     }
+/// }
+///
+/// ```
 pub trait CompressionModifier {
     /// Returns the encoding header the compression modifier should respond to
     fn get_header(&self) -> Encoding;

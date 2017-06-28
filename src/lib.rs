@@ -15,6 +15,7 @@ mod br;
 mod compression_modifier;
 
 pub use iron::headers::Encoding;
+pub use iron::response::WriteBody;
 pub use compression_modifier::CompressionModifier;
 pub use gzip::GZipModifier;
 pub use br::BrotliModifier;
