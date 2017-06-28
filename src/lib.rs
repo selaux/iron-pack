@@ -12,13 +12,16 @@ use iron::{AfterMiddleware};
 mod gzip;
 mod deflate;
 mod br;
-mod writer;
+mod compression_modifier;
 
-use writer::ContentEncoding;
+pub use compression_modifier::CompressionModifier;
+pub use gzip::GZipModifier;
+pub use br::Brotli;
+pub use deflate::Deflate;
 
 const DEFAULT_MIN_BYTES_FOR_COMPRESSION: u64 = 860;
 
-fn which_compression<'a, 'b>(req: &'b Request, res: &'b Response, priority: Vec<&'a ContentEncoding>) -> Option<&'a ContentEncoding> {
+fn which_compression<'a, 'b>(req: &'b Request, res: &'b Response, priority: Vec<&'a CompressionModifier>) -> Option<&'a CompressionModifier> {
     return match (res.headers.get::<iron::headers::ContentEncoding>(), res.headers.get::<ContentLength>(), req.headers.get::<AcceptEncoding>()) {
         (None, Some(content_length), Some(&AcceptEncoding(ref quality_items))) => {
             if (content_length as &u64) < &DEFAULT_MIN_BYTES_FOR_COMPRESSION {
@@ -36,8 +39,8 @@ fn which_compression<'a, 'b>(req: &'b Request, res: &'b Response, priority: Vec<
                         let header = ce.get_header();
                         qi.item == header || header == Encoding::Gzip && any_exists
                     }))
-                    .map(|ce: & &'a ContentEncoding| *ce)
-                    .min_by_key(|ce1: & &'a ContentEncoding| priority.iter().position(|ce2: & &'a ContentEncoding| ce1.get_header() == ce2.get_header()));
+                    .map(|ce: & &'a CompressionModifier| *ce)
+                    .min_by_key(|ce1: & &'a CompressionModifier| priority.iter().position(|ce2: & &'a CompressionModifier| ce1.get_header() == ce2.get_header()));
             }
             None
         }
@@ -76,9 +79,9 @@ impl AfterMiddleware for CompressionMiddleware {
     /// Implementation of the compression middleware
     fn after(&self, req: &mut Request, mut res: Response) -> IronResult<Response> {
         let brotli = br::Brotli {};
-        let gzip = gzip::GZip {};
+        let gzip = gzip::GZipModifier {};
         let deflate = deflate::Deflate {};
-        let default_priorities: Vec<&ContentEncoding> = vec![
+        let default_priorities: Vec<&CompressionModifier> = vec![
             &brotli,
             &gzip,
             &deflate

@@ -2,13 +2,13 @@ use std::io;
 use iron::headers::*;
 use iron::response::WriteBody;
 use libflate::gzip;
-use writer::ContentEncoding;
+use compression_modifier::CompressionModifier;
 
 fn stringify_err(err: io::Error) -> String { format!("Error compressing body: {}", err) }
 
-pub struct GZip;
+pub struct GZipModifier;
 
-impl ContentEncoding for GZip {
+impl CompressionModifier for GZipModifier {
     fn get_header(&self) -> Encoding { Encoding::Gzip }
 
     fn compress_body(&self, body: &mut Box<WriteBody>) -> Result<Vec<u8>, String> {

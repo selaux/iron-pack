@@ -2,7 +2,7 @@ use std::io;
 use iron::headers::*;
 use iron::response::WriteBody;
 use brotli::CompressorWriter;
-use writer::ContentEncoding;
+use compression_modifier::CompressionModifier;
 
 fn stringify_err(err: io::Error) -> String { format!("Error compressing body: {}", err) }
 
@@ -12,7 +12,7 @@ const LG_WINDOW_SIZE: u32 = 20;
 
 pub struct Brotli;
 
-impl ContentEncoding for Brotli {
+impl CompressionModifier for Brotli {
     fn get_header(&self) -> Encoding { Encoding::EncodingExt(String::from("br")) }
 
     fn compress_body(&self, body: &mut Box<WriteBody>) -> Result<Vec<u8>, String> {
