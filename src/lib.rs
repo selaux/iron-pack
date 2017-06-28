@@ -5,20 +5,22 @@ extern crate iron;
 extern crate libflate;
 extern crate brotli;
 
-use std::cmp::Ordering::{Equal, Greater, Less};
 use iron::prelude::*;
 use iron::headers::*;
 use iron::{AfterMiddleware};
 
-mod gzip_writer;
-mod deflate_writer;
-mod brotli_writer;
+mod gzip;
+mod deflate;
+mod br;
+mod writer;
+
+use writer::ContentEncoding;
 
 const DEFAULT_MIN_BYTES_FOR_COMPRESSION: u64 = 860;
 
-fn which_compression(req: &Request, res: &Response) -> Option<Encoding> {
+fn which_compression<'a, 'b>(req: &'b Request, res: &'b Response, priority: Vec<&'a ContentEncoding>) -> Option<&'a ContentEncoding> {
     {
-        let encoding = res.headers.get::<ContentEncoding>();
+        let encoding = res.headers.get::<iron::headers::ContentEncoding>();
         if encoding != None {
             return None;
         }
@@ -33,48 +35,20 @@ fn which_compression(req: &Request, res: &Response) -> Option<Encoding> {
     }
 
     {
-        let brotli_encoding = Encoding::EncodingExt(String::from("br"));
         if let Some(&AcceptEncoding(ref quality_items)) = req.headers.get::<AcceptEncoding>() {
             let max_quality = quality_items.iter().map(|qi| qi.quality).max();
+            let any_exists = quality_items.iter().find(|qi| qi.item == Encoding::EncodingExt(String::from("*"))).is_some();
 
             if let Some(max_quality) = max_quality {
-                let internal_priority = vec![
-                    brotli_encoding,
-                    Encoding::Gzip,
-                    Encoding::EncodingExt(String::from("*")),
-                    Encoding::Deflate
-                ];
-                let allowed_qi = quality_items
+                return quality_items
                     .iter()
                     .filter(|qi| qi.quality == max_quality)
-                    .filter(|qi| internal_priority.iter().position(|q| q == &qi.item) != None)
-                    .min_by(|qi1, qi2| {
-                        match (internal_priority.iter().position(|qi| qi == &qi1.item), internal_priority.iter().position(|qi| qi == &qi2.item)) {
-                            (Some(a), Some(b)) => {
-                                if a > b {
-                                    return Greater;
-                                };
-                                if a < b {
-                                    return Less;
-                                }
-                                Equal
-                            },
-                            _ => Equal
-                        }
-                    })
-                    .map(|encoding| match &encoding.item {
-                        &Encoding::EncodingExt(ref s) => {
-                            if s == "*" {
-                                return Encoding::Gzip;
-                            }
-                            encoding.item.clone()
-                        },
-                        e => e.clone()
-                    });
-
-                if let Some(encoding) = allowed_qi {
-                    return Some(encoding);
-                }
+                    .filter_map(|qi: &'b QualityItem<Encoding>| priority.iter().find(|ce| {
+                        let header = ce.get_header();
+                        qi.item == header || header == Encoding::Gzip && any_exists
+                    }))
+                    .map(|ce: & &'a ContentEncoding| *ce)
+                    .min_by_key(|ce1: & &'a ContentEncoding| priority.iter().position(|ce2: & &'a ContentEncoding| ce1.get_header() == ce2.get_header()));
             }
         }
     }
@@ -112,23 +86,21 @@ impl AfterMiddleware for CompressionMiddleware {
 
     /// Implementation of the compression middleware
     fn after(&self, req: &mut Request, mut res: Response) -> IronResult<Response> {
-        let compression = which_compression(&req, &res);
+        let brotli = br::Brotli {};
+        let gzip = gzip::GZip {};
+        let deflate = deflate::Deflate {};
+        let default_priorities: Vec<&ContentEncoding> = vec![
+            &brotli,
+            &gzip,
+            &deflate
+        ];
+        let compression = which_compression(&req, &res, default_priorities);
 
         match compression {
-            Some(Encoding::Gzip) => {
-                res.set_mut(gzip_writer::GzipWriter);
+            Some(s) => {
+                res.set_mut(s);
                 Ok(res)
-            },
-            Some(Encoding::Deflate) => {
-                res.set_mut(deflate_writer::DeflateWriter);
-                Ok(res)
-            },
-            Some(Encoding::EncodingExt(s)) => {
-                if s == "br" {
-                    res.set_mut(brotli_writer::BrotliWriter);
-                }
-                Ok(res)
-            },
+            }
             _ => Ok(res)
         }
     }
