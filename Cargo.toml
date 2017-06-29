@@ -10,6 +10,9 @@ license = "MIT"
 [lib]
 name = "iron_pack"
 
+[features]
+unstable = []
+
 [dependencies]
 iron = "0.5"
 libflate = "0.1"
@@ -17,3 +20,4 @@ brotli = "1.0"
 
 [dev-dependencies]
 iron-test = "0.5"
+rand = "0.3"
