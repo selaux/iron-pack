@@ -1,3 +1,4 @@
+#![cfg_attr(feature = "unstable", feature(test))]
 //! Compression middleware for Iron. This crate lets you automatically compress iron responses
 //! by providing an AfterMiddleware for your iron server.
 
@@ -124,7 +125,7 @@ mod test_common {
         return chain;
     }
 
-    pub fn post_data_with_accept_encoding(data: &str, accept_encoding: Option<AcceptEncoding>, chain: Chain) -> Response {
+    pub fn post_data_with_accept_encoding(data: &str, accept_encoding: Option<AcceptEncoding>, chain: &Chain) -> Response {
         let mut headers = Headers::new();
         if let Some(value) = accept_encoding {
             headers.set(value);
@@ -133,7 +134,7 @@ mod test_common {
         return request::post("http://localhost:3000/",
                              headers,
                              data,
-                             &chain).unwrap();
+                             chain).unwrap();
     }
 }
 
@@ -150,7 +151,7 @@ mod uncompressable_tests {
     fn it_should_not_compress_response_when_client_does_not_send_accept_encoding_header() {
         let chain = build_compressed_echo_chain(false);
         let value = "a".repeat(1000);
-        let res = post_data_with_accept_encoding(&value, None, chain);
+        let res = post_data_with_accept_encoding(&value, None, &chain);
 
         assert_eq!(res.headers.get::<ContentEncoding>(), None);
         assert_eq!(response::extract_body_to_string(res), value);
@@ -162,7 +163,7 @@ mod uncompressable_tests {
         let value = "a".repeat(1000);
         let res = post_data_with_accept_encoding(&value,
                                                  Some(AcceptEncoding(vec![qitem(Encoding::Chunked)])),
-                                                 chain);
+                                                 &chain);
 
         assert_eq!(res.headers.get::<ContentEncoding>(), None);
         assert_eq!(response::extract_body_to_bytes(res), value.into_bytes());
@@ -174,7 +175,7 @@ mod uncompressable_tests {
         let chain = build_compressed_echo_chain(false);
         let res = post_data_with_accept_encoding(&value,
                                                  Some(AcceptEncoding(vec![qitem(Encoding::Gzip)])),
-                                                 chain);
+                                                 &chain);
 
         assert_eq!(res.headers.get::<ContentEncoding>(), None);
         assert_eq!(response::extract_body_to_bytes(res), value.into_bytes());
@@ -186,7 +187,7 @@ mod uncompressable_tests {
         let chain = build_compressed_echo_chain(true);
         let res = post_data_with_accept_encoding(&value,
                                                  Some(AcceptEncoding(vec![qitem(Encoding::Gzip)])),
-                                                 chain);
+                                                 &chain);
 
         assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Chunked])));
         assert_eq!(response::extract_body_to_bytes(res), value.into_bytes());
@@ -210,7 +211,7 @@ mod gzip_tests {
         let chain = build_compressed_echo_chain(false);
         let res = post_data_with_accept_encoding(&value,
                                                  Some(AcceptEncoding(vec![qitem(Encoding::Gzip)])),
-                                                 chain);
+                                                 &chain);
 
         assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Gzip])));
 
@@ -239,7 +240,7 @@ mod deflate_tests {
         let chain = build_compressed_echo_chain(false);
         let res = post_data_with_accept_encoding(&value,
                                                  Some(AcceptEncoding(vec![qitem(Encoding::Deflate)])),
-                                                 chain);
+                                                 &chain);
 
         assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Deflate])));
 
@@ -270,7 +271,7 @@ mod brotli_tests {
                                                  Some(AcceptEncoding(vec![
                                                      qitem(Encoding::EncodingExt(String::from("br")))
                                                  ])),
-                                                 chain);
+                                                 &chain);
 
         assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::EncodingExt(String::from("br"))])));
 
@@ -297,7 +298,7 @@ mod priority_tests {
                                                      QualityItem { item: Encoding::Gzip, quality: q(0.5) },
                                                      QualityItem { item: Encoding::Deflate, quality: q(1.0) }
                                                  ])),
-                                                 chain);
+                                                 &chain);
 
         assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Deflate])));
     }
@@ -311,7 +312,7 @@ mod priority_tests {
                                                      QualityItem { item: Encoding::Deflate, quality: q(1.0) },
                                                      QualityItem { item: Encoding::Gzip, quality: q(0.5) }
                                                  ])),
-                                                 chain);
+                                                 &chain);
 
         assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Deflate])));
     }
@@ -324,7 +325,7 @@ mod priority_tests {
                                                  Some(AcceptEncoding(vec![
                                                      QualityItem { item: Encoding::Gzip, quality: q(0.0) }
                                                  ])),
-                                                 chain);
+                                                 &chain);
 
         assert_eq!(res.headers.get::<ContentEncoding>(), None);
     }
@@ -340,7 +341,7 @@ mod priority_tests {
                                                      qitem(Encoding::EncodingExt(String::from("br"))),
                                                      qitem(Encoding::Deflate),
                                                  ])),
-                                                 chain);
+                                                 &chain);
 
         assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::EncodingExt(String::from("br"))])));
     }
@@ -354,7 +355,7 @@ mod priority_tests {
                                                      qitem(Encoding::EncodingExt(String::from("*"))),
                                                      qitem(Encoding::Deflate),
                                                  ])),
-                                                 chain);
+                                                 &chain);
 
         assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Gzip])));
     }
@@ -368,8 +369,73 @@ mod priority_tests {
                                                      qitem(Encoding::Deflate),
                                                      qitem(Encoding::Gzip),
                                                  ])),
-                                                 chain);
+                                                 &chain);
 
         assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Gzip])));
     }
+}
+
+#[cfg(all(feature = "unstable", test))]
+mod middleware_benchmarks {
+    macro_rules! bench_chain_with_header_and_size {
+        ($name:ident, $chain:expr, $header:expr, $response_size:expr) => {
+            #[bench]
+            fn $name(b: &mut Bencher) {
+                let chain = $chain;
+                let mut rng = rand::IsaacRng::new_unseeded();
+
+                b.iter(|| {
+                    let data: String = rng.gen_ascii_chars().take($response_size).collect();
+                    let _ = post_data_with_accept_encoding(&data,
+                                                           $header,
+                                                           &chain);
+                })
+            }
+        };
+    }
+
+    macro_rules! bench_chains_with_size {
+        ($mod_name:ident, $size:expr) => {
+            mod $mod_name {
+                extern crate test;
+                extern crate rand;
+
+                use std::io::Read;
+                use iron::prelude::*;
+                use iron::{Chain, status};
+                use iron::headers::*;
+                use self::test::Bencher;
+                use self::rand::Rng;
+                use super::super::test_common::*;
+
+                fn build_echo_chain() -> Chain {
+                    let chain = Chain::new(|req: &mut Request| {
+                        let mut body: Vec<u8> = vec!();
+                        req.body.read_to_end(&mut body).unwrap();
+                        Ok(Response::with((status::Ok, body)))
+                    });
+                    return chain;
+                }
+
+                bench_chain_with_header_and_size!(without_middleware, build_echo_chain(), None, $size);
+                bench_chain_with_header_and_size!(with_middleware_no_accept_header, build_compressed_echo_chain(false), None, $size);
+                bench_chain_with_header_and_size!(with_middleware_gzip,
+                                                  build_compressed_echo_chain(false),
+                                                  Some(AcceptEncoding(vec![qitem(Encoding::Gzip)])),
+                                                  $size);
+                bench_chain_with_header_and_size!(with_middleware_deflate,
+                                                  build_compressed_echo_chain(false),
+                                                  Some(AcceptEncoding(vec![qitem(Encoding::Deflate)])),
+                                                  $size);
+                bench_chain_with_header_and_size!(with_middleware_brotli,
+                                                  build_compressed_echo_chain(false),
+                                                  Some(AcceptEncoding(vec![qitem(Encoding::EncodingExt(String::from("br")))])),
+                                                  $size);
+            }
+        };
+    }
+
+    bench_chains_with_size!(response_1kb, 1024);
+    bench_chains_with_size!(response_128kb, 128 * 1024);
+    bench_chains_with_size!(response_1mb, 1024 * 1024);
 }
