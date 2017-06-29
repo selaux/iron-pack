@@ -3,10 +3,7 @@ rust:
   - stable
   - beta
   - nightly
-after_success:
+after_script:
   - if [ "$TRAVIS_RUST_VERSION" == "nightly" ]; then
         cargo bench  --features "unstable";
     fi
-matrix:
-  allow_failures:
-    - rust: nightly
