@@ -36,7 +36,7 @@ fn which_compression<'a, 'b>(req: &'b Request, res: &'b Response, priority: Vec<
             if let Some(max_quality) = max_quality {
                 return quality_items
                     .iter()
-                    .filter(|qi| qi.quality == max_quality)
+                    .filter(|qi| qi.quality != Quality(0) && qi.quality == max_quality)
                     .filter_map(|qi: &'b QualityItem<Encoding>| priority.iter().find(|ce| {
                         let header = ce.get_header();
                         qi.item == header || header == Encoding::Gzip && any_exists
@@ -372,6 +372,25 @@ mod priority_tests {
                                 &chain).unwrap();
 
         assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Deflate])));
+    }
+
+    #[test]
+    fn it_should_not_use_a_priority_0_algorithm() {
+        let mut headers = Headers::new();
+        let value = "a".repeat(1000);
+        let chain = build_compressed_echo_chain(false);
+
+        headers.set(
+            AcceptEncoding(vec![
+                QualityItem { item: Encoding::Gzip, quality: q(0.0) }
+            ])
+        );
+        let res = request::post("http://localhost:3000/",
+                                headers,
+                                &value,
+                                &chain).unwrap();
+
+        assert_eq!(res.headers.get::<ContentEncoding>(), None);
     }
 
     #[test]
