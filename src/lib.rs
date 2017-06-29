@@ -377,96 +377,65 @@ mod priority_tests {
 
 #[cfg(all(feature = "unstable", test))]
 mod middleware_benchmarks {
-    extern crate test;
-    extern crate rand;
+    macro_rules! bench_chain_with_header_and_size {
+        ($name:ident, $chain:expr, $header:expr, $response_size:expr) => {
+            #[bench]
+            fn $name(b: &mut Bencher) {
+                let chain = $chain;
+                let mut rng = rand::IsaacRng::new_unseeded();
 
-    use iron::headers::*;
-    use self::test::Bencher;
-    use self::rand::Rng;
-
-    use std::io::Read;
-    use iron::prelude::*;
-    use iron::{Chain, status};
-
-    use super::test_common::*;
-
-    fn build_echo_chain() -> Chain {
-        let chain = Chain::new(|req: &mut Request| {
-            let mut body: Vec<u8> = vec!();
-            req.body.read_to_end(&mut body).unwrap();
-            Ok(Response::with((status::Ok, body)))
-        });
-        return chain;
+                b.iter(|| {
+                    let data: String = rng.gen_ascii_chars().take($response_size).collect();
+                    let _ = post_data_with_accept_encoding(&data,
+                                                           $header,
+                                                           &chain);
+                })
+            }
+        };
     }
 
-    #[bench]
-    fn without_middleware(b: &mut Bencher) {
-        let chain = build_echo_chain();
-        let mut rng = self::rand::IsaacRng::new_unseeded();
+    macro_rules! bench_chains_with_size {
+        ($mod_name:ident, $size:expr) => {
+            mod $mod_name {
+                extern crate test;
+                extern crate rand;
 
-        b.iter(|| {
-            let data: String = rng.gen_ascii_chars().take(1024).collect();
-            let _ = post_data_with_accept_encoding(&data,
-                                                   None,
-                                                   &chain);
-        })
+                use std::io::Read;
+                use iron::prelude::*;
+                use iron::{Chain, status};
+                use iron::headers::*;
+                use self::test::Bencher;
+                use self::rand::Rng;
+                use super::super::test_common::*;
+
+                fn build_echo_chain() -> Chain {
+                    let chain = Chain::new(|req: &mut Request| {
+                        let mut body: Vec<u8> = vec!();
+                        req.body.read_to_end(&mut body).unwrap();
+                        Ok(Response::with((status::Ok, body)))
+                    });
+                    return chain;
+                }
+
+                bench_chain_with_header_and_size!(without_middleware, build_echo_chain(), None, $size);
+                bench_chain_with_header_and_size!(with_middleware_no_accept_header, build_compressed_echo_chain(false), None, $size);
+                bench_chain_with_header_and_size!(with_middleware_gzip,
+                                                  build_compressed_echo_chain(false),
+                                                  Some(AcceptEncoding(vec![qitem(Encoding::Gzip)])),
+                                                  $size);
+                bench_chain_with_header_and_size!(with_middleware_deflate,
+                                                  build_compressed_echo_chain(false),
+                                                  Some(AcceptEncoding(vec![qitem(Encoding::Deflate)])),
+                                                  $size);
+                bench_chain_with_header_and_size!(with_middleware_brotli,
+                                                  build_compressed_echo_chain(false),
+                                                  Some(AcceptEncoding(vec![qitem(Encoding::EncodingExt(String::from("br")))])),
+                                                  $size);
+            }
+        };
     }
 
-    #[bench]
-    fn with_middleware_no_accept_header(b: &mut Bencher) {
-        let chain = build_compressed_echo_chain(false);
-        let mut rng = self::rand::IsaacRng::new_unseeded();
-
-        b.iter(|| {
-            let data: String = rng.gen_ascii_chars().take(1024).collect();
-            let _ = post_data_with_accept_encoding(&data,
-                                                   None,
-                                                   &chain);
-        })
-    }
-
-    #[bench]
-    fn with_middleware_gzip(b: &mut Bencher) {
-        let chain = build_compressed_echo_chain(false);
-        let mut rng = self::rand::IsaacRng::new_unseeded();
-
-        b.iter(|| {
-            let data: String = rng.gen_ascii_chars().take(1024).collect();
-            let _ = post_data_with_accept_encoding(&data,
-                                                   Some(AcceptEncoding(vec![
-                                                       qitem(Encoding::Gzip)
-                                                   ])),
-                                                   &chain);
-        })
-    }
-
-    #[bench]
-    fn with_middleware_deflate(b: &mut Bencher) {
-        let chain = build_compressed_echo_chain(false);
-        let mut rng = self::rand::IsaacRng::new_unseeded();
-
-        b.iter(|| {
-            let data: String = rng.gen_ascii_chars().take(1024).collect();
-            let _ = post_data_with_accept_encoding(&data,
-                                                   Some(AcceptEncoding(vec![
-                                                       qitem(Encoding::Deflate)
-                                                   ])),
-                                                   &chain);
-        })
-    }
-
-    #[bench]
-    fn with_middleware_brotli(b: &mut Bencher) {
-        let chain = build_compressed_echo_chain(false);
-        let mut rng = self::rand::IsaacRng::new_unseeded();
-
-        b.iter(|| {
-            let data: String = rng.gen_ascii_chars().take(1024).collect();
-            let _ = post_data_with_accept_encoding(&data,
-                                                   Some(AcceptEncoding(vec![
-                                                       qitem(Encoding::EncodingExt(String::from("br")))
-                                                   ])),
-                                                   &chain);
-        })
-    }
+    bench_chains_with_size!(response_1kb, 1024);
+    bench_chains_with_size!(response_128kb, 128 * 1024);
+    bench_chains_with_size!(response_1mb, 1024 * 1024);
 }
