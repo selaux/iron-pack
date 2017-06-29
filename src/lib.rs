@@ -384,6 +384,10 @@ mod middleware_benchmarks {
     use self::test::Bencher;
     use self::rand::Rng;
 
+    use std::io::Read;
+    use iron::prelude::*;
+    use iron::{Chain, status};
+
     use super::test_common::*;
 
     fn build_echo_chain() -> Chain {
@@ -402,9 +406,9 @@ mod middleware_benchmarks {
 
         b.iter(|| {
             let data: String = rng.gen_ascii_chars().take(1024).collect();
-            let res = post_data_with_accept_encoding(&data,
-                                                     None,
-                                                     &chain);
+            let _ = post_data_with_accept_encoding(&data,
+                                                   None,
+                                                   &chain);
         })
     }
 
@@ -415,9 +419,9 @@ mod middleware_benchmarks {
 
         b.iter(|| {
             let data: String = rng.gen_ascii_chars().take(1024).collect();
-            let res = post_data_with_accept_encoding(&data,
-                                                     None,
-                                                     &chain);
+            let _ = post_data_with_accept_encoding(&data,
+                                                   None,
+                                                   &chain);
         })
     }
 
@@ -428,11 +432,11 @@ mod middleware_benchmarks {
 
         b.iter(|| {
             let data: String = rng.gen_ascii_chars().take(1024).collect();
-            let res = post_data_with_accept_encoding(&data,
-                                                     Some(AcceptEncoding(vec![
-                                                         qitem(Encoding::Gzip)
-                                                     ])),
-                                                     &chain);
+            let _ = post_data_with_accept_encoding(&data,
+                                                   Some(AcceptEncoding(vec![
+                                                       qitem(Encoding::Gzip)
+                                                   ])),
+                                                   &chain);
         })
     }
 
@@ -443,11 +447,11 @@ mod middleware_benchmarks {
 
         b.iter(|| {
             let data: String = rng.gen_ascii_chars().take(1024).collect();
-            let res = post_data_with_accept_encoding(&data,
-                                                     Some(AcceptEncoding(vec![
-                                                         qitem(Encoding::Deflate)
-                                                     ])),
-                                                     &chain);
+            let _ = post_data_with_accept_encoding(&data,
+                                                   Some(AcceptEncoding(vec![
+                                                       qitem(Encoding::Deflate)
+                                                   ])),
+                                                   &chain);
         })
     }
 
@@ -458,11 +462,11 @@ mod middleware_benchmarks {
 
         b.iter(|| {
             let data: String = rng.gen_ascii_chars().take(1024).collect();
-            let res = post_data_with_accept_encoding(&data,
-                                                     Some(AcceptEncoding(vec![
-                                                         qitem(Encoding::EncodingExt(String::from("br")))
-                                                     ])),
-                                                     &chain);
+            let _ = post_data_with_accept_encoding(&data,
+                                                   Some(AcceptEncoding(vec![
+                                                       qitem(Encoding::EncodingExt(String::from("br")))
+                                                   ])),
+                                                   &chain);
         })
     }
 }
