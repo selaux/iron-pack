@@ -449,9 +449,12 @@ mod middleware_benchmarks {
 
                 b.iter(|| {
                     let data: String = rng.gen_ascii_chars().take($response_size).collect();
-                    let _ = post_data_with_accept_encoding(&data,
+                    let res = post_data_with_accept_encoding(&data,
                                                            $header,
                                                            &chain);
+                    let compressed_bytes = response::extract_body_to_bytes(res);
+
+                    assert!(compressed_bytes.len() > 0);
                 })
             }
         };
@@ -460,6 +463,7 @@ mod middleware_benchmarks {
     macro_rules! bench_chains_with_size {
         ($mod_name:ident, $size:expr) => {
             mod $mod_name {
+                extern crate iron_test;
                 extern crate test;
                 extern crate rand;
 
@@ -468,6 +472,7 @@ mod middleware_benchmarks {
                 use iron::{Chain, status};
                 use iron::headers::*;
                 use self::test::Bencher;
+                use self::iron_test::{response};
                 use self::rand::Rng;
                 use super::super::test_common::*;
 
