@@ -6,25 +6,82 @@ extern crate iron;
 extern crate libflate;
 extern crate brotli;
 
+use std::io;
+use std::io::Write;
 use iron::prelude::*;
 use iron::headers::*;
 use iron::{AfterMiddleware};
 
-mod gzip;
-mod deflate;
-mod br;
-mod compression_modifier;
-
 pub use iron::headers::Encoding;
 pub use iron::response::WriteBody;
-pub use compression_modifier::CompressionModifier;
-pub use gzip::GZipModifier;
-pub use br::BrotliModifier;
-pub use deflate::DeflateModifier;
 
 const DEFAULT_MIN_BYTES_FOR_COMPRESSION: u64 = 860;
 
-fn which_compression<'a, 'b>(req: &'b Request, res: &'b Response, priority: Vec<&'a CompressionModifier>) -> Option<&'a CompressionModifier> {
+#[derive(PartialEq, Clone, Debug)]
+enum CompressionEncoding {
+    Brotli,
+    Deflate,
+    Gzip,
+}
+
+pub struct BrotliBody(Box<WriteBody>);
+
+impl WriteBody for BrotliBody {
+    fn write_body(&mut self, w: &mut Write) -> io::Result<()> {
+        const BUFFER_SIZE: usize = 4096;
+        const QUALITY: u32 = 8;
+        const LG_WINDOW_SIZE: u32 = 20;
+        let mut encoder = brotli::CompressorWriter::new(w, BUFFER_SIZE, QUALITY, LG_WINDOW_SIZE);
+        self.0.write_body(&mut encoder)?;
+        Ok(())
+    }
+}
+
+pub struct GzipBody(Box<WriteBody>);
+
+impl WriteBody for GzipBody {
+    fn write_body(&mut self, w: &mut Write) -> io::Result<()> {
+        let mut encoder = libflate::gzip::Encoder::new(w)?;
+        self.0.write_body(&mut encoder)?;
+        encoder.finish().into_result().map(|_| ())
+    }
+}
+
+pub struct DeflateBody(Box<WriteBody>);
+
+impl WriteBody for DeflateBody {
+    fn write_body(&mut self, w: &mut Write) -> io::Result<()> {
+        let mut encoder = libflate::deflate::Encoder::new(w);
+        self.0.write_body(&mut encoder)?;
+        encoder.finish().into_result().map(|_| ())
+    }
+}
+
+fn encoding_matches_header(encoding: &CompressionEncoding, header: &Encoding) -> bool {
+    match encoding {
+        &CompressionEncoding::Brotli => *header == Encoding::EncodingExt(String::from("br")),
+        &CompressionEncoding::Deflate => *header == Encoding::Deflate,
+        &CompressionEncoding::Gzip => *header == Encoding::Gzip || *header == Encoding::EncodingExt(String::from("*")),
+    }
+}
+
+fn get_body(encoding: &CompressionEncoding, wrapped_body: Box<WriteBody>) -> Box<WriteBody> {
+    match encoding {
+        &CompressionEncoding::Brotli => Box::new(BrotliBody(wrapped_body)),
+        &CompressionEncoding::Deflate => Box::new(DeflateBody(wrapped_body)),
+        &CompressionEncoding::Gzip => Box::new(GzipBody(wrapped_body)),
+    }
+}
+
+fn get_header(encoding: &CompressionEncoding) -> Encoding {
+    match encoding {
+        &CompressionEncoding::Brotli => Encoding::EncodingExt(String::from("br")),
+        &CompressionEncoding::Deflate => Encoding::Deflate,
+        &CompressionEncoding::Gzip => Encoding::Gzip,
+    }
+}
+
+fn which_compression<'a, 'b>(req: &'b Request, res: &'b Response, priority: &Vec<CompressionEncoding>) -> Option<CompressionEncoding> {
     return match (res.headers.get::<iron::headers::ContentEncoding>(), res.headers.get::<ContentLength>(), req.headers.get::<AcceptEncoding>()) {
         (None, Some(content_length), Some(&AcceptEncoding(ref quality_items))) => {
             if (content_length as &u64) < &DEFAULT_MIN_BYTES_FOR_COMPRESSION {
@@ -32,18 +89,20 @@ fn which_compression<'a, 'b>(req: &'b Request, res: &'b Response, priority: Vec<
             }
 
             let max_quality = quality_items.iter().map(|qi| qi.quality).max();
-            let any_exists = quality_items.iter().find(|qi| qi.item == Encoding::EncodingExt(String::from("*"))).is_some();
 
             if let Some(max_quality) = max_quality {
-                return quality_items
+                let quality_items: Vec<&QualityItem<Encoding>> = quality_items
                     .iter()
                     .filter(|qi| qi.quality != Quality(0) && qi.quality == max_quality)
-                    .filter_map(|qi: &'b QualityItem<Encoding>| priority.iter().find(|ce| {
-                        let header = ce.get_header();
-                        qi.item == header || header == Encoding::Gzip && any_exists
-                    }))
-                    .map(|ce: & &'a CompressionModifier| *ce)
-                    .min_by_key(|ce1: & &'a CompressionModifier| priority.iter().position(|ce2: & &'a CompressionModifier| ce1.get_header() == ce2.get_header()));
+                    .collect();
+
+                return priority
+                    .iter()
+                    .filter(|ce| quality_items.iter().find(|qi| {
+                        encoding_matches_header(ce, &qi.item)
+                    }).is_some())
+                    .nth(0)
+                    .map(|ce| ce.clone());
             }
             None
         }
@@ -81,18 +140,18 @@ impl AfterMiddleware for CompressionMiddleware {
 
     /// Implementation of the compression middleware
     fn after(&self, req: &mut Request, mut res: Response) -> IronResult<Response> {
-        let brotli = br::BrotliModifier {};
-        let gzip = gzip::GZipModifier {};
-        let deflate = deflate::DeflateModifier {};
-        let default_priorities: Vec<&CompressionModifier> = vec![
-            &brotli,
-            &gzip,
-            &deflate
-        ];
+        let brotli = CompressionEncoding::Brotli;
+        let deflate = CompressionEncoding::Deflate;
+        let gzip = CompressionEncoding::Gzip;
+        let default_priorities = vec!(brotli, gzip, deflate);
 
-        if let Some(compression_modifier) = which_compression(&req, &res, default_priorities) {
-            res.set_mut(compression_modifier);
+        if res.body.is_some() {
+            if let Some(compression) = which_compression(&req, &res, &default_priorities) {
+                res.headers.set(ContentEncoding(vec![get_header(&compression)]));
+                res.body = Some(get_body(&compression, res.body.take().unwrap()));
+            }
         }
+
         Ok(res)
     }
 }
