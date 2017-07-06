@@ -148,6 +148,7 @@ impl AfterMiddleware for CompressionMiddleware {
         if res.body.is_some() {
             if let Some(compression) = which_compression(&req, &res, &default_priorities) {
                 res.headers.set(ContentEncoding(vec![get_header(&compression)]));
+                res.headers.remove::<ContentLength>();
                 res.body = Some(get_body(&compression, res.body.take().unwrap()));
             }
         }
@@ -272,6 +273,7 @@ mod gzip_tests {
                                                  Some(AcceptEncoding(vec![qitem(Encoding::Gzip)])),
                                                  &chain);
 
+        assert_eq!(res.headers.get::<ContentLength>(), None);
         assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Gzip])));
 
         let compressed_bytes = response::extract_body_to_bytes(res);
@@ -301,6 +303,7 @@ mod deflate_tests {
                                                  Some(AcceptEncoding(vec![qitem(Encoding::Deflate)])),
                                                  &chain);
 
+        assert_eq!(res.headers.get::<ContentLength>(), None);
         assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::Deflate])));
 
         let compressed_bytes = response::extract_body_to_bytes(res);
@@ -332,6 +335,7 @@ mod brotli_tests {
                                                  ])),
                                                  &chain);
 
+        assert_eq!(res.headers.get::<ContentLength>(), None);
         assert_eq!(res.headers.get::<ContentEncoding>(), Some(&ContentEncoding(vec![Encoding::EncodingExt(String::from("br"))])));
 
         let compressed_bytes = response::extract_body_to_bytes(res);
