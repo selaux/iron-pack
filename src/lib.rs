@@ -12,8 +12,8 @@ use iron::prelude::*;
 use iron::headers::*;
 use iron::{AfterMiddleware};
 
-pub use iron::headers::Encoding;
-pub use iron::response::WriteBody;
+use iron::headers::Encoding;
+use iron::response::WriteBody;
 
 const DEFAULT_MIN_BYTES_FOR_COMPRESSION: u64 = 860;
 
@@ -24,7 +24,7 @@ enum CompressionEncoding {
     Gzip,
 }
 
-pub struct BrotliBody(Box<WriteBody>);
+struct BrotliBody(Box<WriteBody>);
 
 impl WriteBody for BrotliBody {
     fn write_body(&mut self, w: &mut Write) -> io::Result<()> {
@@ -37,7 +37,7 @@ impl WriteBody for BrotliBody {
     }
 }
 
-pub struct GzipBody(Box<WriteBody>);
+struct GzipBody(Box<WriteBody>);
 
 impl WriteBody for GzipBody {
     fn write_body(&mut self, w: &mut Write) -> io::Result<()> {
@@ -47,7 +47,7 @@ impl WriteBody for GzipBody {
     }
 }
 
-pub struct DeflateBody(Box<WriteBody>);
+struct DeflateBody(Box<WriteBody>);
 
 impl WriteBody for DeflateBody {
     fn write_body(&mut self, w: &mut Write) -> io::Result<()> {
