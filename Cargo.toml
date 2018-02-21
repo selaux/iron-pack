@@ -1,6 +1,6 @@
 [package]
 name = "iron-pack"
-version = "0.2.0"
+version = "0.3.0"
 description = "Zero-configuration compression middleware for iron"
 keywords = ["iron", "compress", "gzip", "deflate"]
 authors = ["Stefan Lau <github@stefanlau.com>"]
